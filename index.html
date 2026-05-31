@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Incident Response Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+
+  <style>
+    :root {
+      --page-bg: #f5f5f5;
+      --canvas: #ffffff;
+      --visual-bg: #ffffff;
+      --border: #d9d9d9;
+      --border-soft: #eeeeee;
+      --text: #252423;
+      --muted: #605e5c;
+      --faint: #8a8886;
+      --blue: #01a1f1;
+      --blue-dark: #004578;
+      --blue-soft: #7fcef3;
+      --orange: #f7630c;
+      --grey: #a19f9d;
+      --grid: #eeeeee;
+      --danger: #a4262c;
+      --good: #107c10;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--page-bg);
+      color: var(--text);
+      font-family: "Segoe UI", Arial, sans-serif;
+      min-height: 100vh;
+    }
+
+    .report-shell {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 18px;
+    }
+
+    .report-canvas {
+      background: var(--canvas);
+      border: 1px solid var(--border);
+      min-height: calc(100vh - 36px);
+      padding: 18px 20px 16px;
+    }
+
+    .report-header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: start;
+      border-bottom: 1px solid var(--border-soft);
+      padding-bottom: 12px;
+      margin-bottom: 12px;
+    }
+
+    .eyebrow {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.6px;
+      font-weight: 600;
+      color: var(--blue-dark);
+      margin-bottom: 4px;
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.2;
+    }
+
+    .subtitle {
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .data-warning {
+      border: 1px solid #f8d27a;
+      background: #fff4ce;
+      color: #6b4a00;
+      padding: 7px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    /* SLICERS */
+    .slicer-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
+      align-items: stretch;
+    }
+
+    .slicer {
+      border: 1px solid var(--border);
+      background: #fff;
+      min-height: 72px;
+      padding: 7px 9px;
+    }
+
+    .slicer-label {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      margin-bottom: 5px;
+    }
+
+    .slicer-value {
+      font-size: 13px;
+      color: var(--text);
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+      padding-top: 7px;
+    }
+
+    .chev {
+      color: var(--faint);
+      font-size: 11px;
+    }
+
+    .date-range-slicer {
+      grid-column: auto;
+    }
+
+    .date-fields {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 2px;
+      margin-bottom: 8px;
+    }
+
+    .date-input-look {
+      border-bottom: 1px solid #c8c6c4;
+      padding: 2px 2px 3px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--text);
+      min-height: 20px;
+    }
+
+    .calendar-icon {
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .range-line {
+      position: relative;
+      height: 16px;
+      margin: 0 9px;
+    }
+
+    .range-track {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 7px;
+      height: 2px;
+      background: #c8c6c4;
+    }
+
+    .range-selected {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 7px;
+      height: 2px;
+      background: var(--blue-dark);
+    }
+
+    .range-handle {
+      position: absolute;
+      top: 0;
+      width: 16px;
+      height: 16px;
+      border: 2px solid #605e5c;
+      background: #ffffff;
+      border-radius: 50%;
+    }
+
+    .range-handle.left {
+      left: 0;
+      transform: translateX(-50%);
+    }
+
+    .range-handle.right {
+      right: 0;
+      transform: translateX(50%);
+    }
+
+    /* PAGE TABS */
+    .page-tabs {
+      display: flex;
+      gap: 4px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+
+    .page-tab {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 9px 16px 8px;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+    }
+
+    .page-tab.active {
+      color: var(--blue-dark);
+      border-bottom-color: var(--blue);
+    }
+
+    /* KPI */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .kpi {
+      border: 1px solid var(--border);
+      background: var(--visual-bg);
+      padding: 12px 12px 10px;
+      min-height: 88px;
+    }
+
+    .kpi-number {
+      font-size: 32px;
+      line-height: 1;
+      font-weight: 600;
+      color: var(--blue-dark);
+      letter-spacing: -0.5px;
+    }
+
+    .kpi-number.orange {
+      color: var(--orange);
+    }
+
+    .kpi-number.red {
+      color: var(--danger);
+    }
+
+    .kpi-number.green {
+      color: var(--good);
+    }
+
+    .kpi-title {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .kpi-sub {
+      margin-top: 2px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* PAGE CONTENT */
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .overview-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .lower-grid {
+      display: grid;
+      grid-template-columns: 1.15fr 1fr 0.85fr;
+      gap: 10px;
+    }
+
+    .two-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .visual {
+      border: 1px solid var(--border);
+      background: var(--visual-bg);
+      padding: 10px 12px 8px;
+      min-width: 0;
+    }
+
+    .visual-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 2px;
+    }
+
+    .visual-subtitle {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .chart-frame {
+      position: relative;
+      width: 100%;
+      height: 270px;
+    }
+
+    .chart-frame.short {
+      height: 230px;
+    }
+
+    .chart-frame.tall {
+      height: 330px;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    .insights {
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      background: #fff;
+    }
+
+    .insight-list {
+      margin-top: 8px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .insight-item {
+      border-left: 3px solid var(--blue);
+      padding-left: 8px;
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--text);
+    }
+
+    .insight-item.alert {
+      border-left-color: var(--orange);
+    }
+
+    .insight-item.risk {
+      border-left-color: var(--danger);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    th {
+      text-align: left;
+      color: var(--muted);
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      padding: 6px 4px;
+      font-size: 11px;
+    }
+
+    td {
+      padding: 7px 4px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .bar-track {
+      height: 7px;
+      background: #efefef;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      background: var(--blue);
+    }
+
+    .footer {
+      margin-top: 10px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      color: var(--faint);
+      font-size: 10.5px;
+      border-top: 1px solid var(--border-soft);
+      padding-top: 8px;
+    }
+
+    .chart-error {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      border: 1px dashed var(--border);
+      color: var(--muted);
+      font-size: 13px;
+      padding: 14px;
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 1100px) {
+      .kpi-row {
+        grid-template-columns: repeat(3, 1fr);
+      }
+
+      .overview-grid,
+      .lower-grid,
+      .two-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .slicer-row {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 760px) {
+      .report-shell {
+        padding: 8px;
+      }
+
+      .report-canvas {
+        padding: 12px;
+      }
+
+      .report-header {
+        grid-template-columns: 1fr;
+      }
+
+      .kpi-row {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      h1 {
+        font-size: 20px;
+      }
+
+      .kpi-number {
+        font-size: 28px;
+      }
+
+      .chart-frame,
+      .chart-frame.short,
+      .chart-frame.tall {
+        height: 250px;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .slicer-row,
+      .kpi-row {
+        grid-template-columns: 1fr;
+      }
+
+      .page-tabs {
+        overflow-x: auto;
+      }
+
+      .page-tab {
+        white-space: nowrap;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="report-shell">
+    <div class="report-canvas">
+
+      <header class="report-header">
+        <div>
+          <div class="eyebrow">Emergency Unit Operations</div>
+          <h1>Incident Response Dashboard</h1>
+          <div class="subtitle">
+            Operational performance view for incident volume, response timing and shift demand.
+          </div>
+        </div>
+      </header>
+
+      <section class="slicer-row">
+        <div class="slicer date-range-slicer">
+          <div class="slicer-label">Date Range</div>
+
+          <div class="date-fields">
+            <div class="date-input-look">
+              01/08/2026 <span class="calendar-icon">▣</span>
+            </div>
+            <div class="date-input-look">
+              16/08/2026 <span class="calendar-icon">▣</span>
+            </div>
+          </div>
+
+          <div class="range-line" aria-hidden="true">
+            <div class="range-track"></div>
+            <div class="range-selected"></div>
+            <div class="range-handle left"></div>
+            <div class="range-handle right"></div>
+          </div>
+        </div>
+
+        <div class="slicer">
+          <div class="slicer-label">Unit</div>
+          <div class="slicer-value">
+            Emergency Unit <span class="chev">▾</span>
+          </div>
+        </div>
+
+        <div class="slicer">
+          <div class="slicer-label">Incident Category</div>
+          <div class="slicer-value">
+            All <span class="chev">▾</span>
+          </div>
+        </div>
+
+        <div class="slicer">
+          <div class="slicer-label">Shift Period</div>
+          <div class="slicer-value">
+            All <span class="chev">▾</span>
+          </div>
+        </div>
+      </section>
+
+      <nav class="page-tabs">
+        <button class="page-tab active" onclick="switchTab('overview', this)">Overview</button>
+        <button class="page-tab" onclick="switchTab('incidents', this)">Incidents</button>
+        <button class="page-tab" onclick="switchTab('timing', this)">Timing</button>
+      </nav>
+
+      <section class="kpi-row">
+        <div class="kpi">
+          <div class="kpi-number">484</div>
+          <div class="kpi-title">Total Incidents</div>
+          <div class="kpi-sub">Over 16 shift days</div>
+        </div>
+
+        <div class="kpi">
+          <div class="kpi-number green">8.0</div>
+          <div class="kpi-title">Avg Response Time</div>
+          <div class="kpi-sub">Minutes to arrive on scene</div>
+        </div>
+
+        <div class="kpi">
+          <div class="kpi-number orange">47.7</div>
+          <div class="kpi-title">Avg Handling Time</div>
+          <div class="kpi-sub">Minutes per incident</div>
+        </div>
+
+        <div class="kpi">
+          <div class="kpi-number">30.2</div>
+          <div class="kpi-title">Daily Average</div>
+          <div class="kpi-sub">Incidents per shift day</div>
+        </div>
+
+        <div class="kpi">
+          <div class="kpi-number red">99.6%</div>
+          <div class="kpi-title">EU EMG Rate</div>
+          <div class="kpi-sub">Initial EU emergency classification</div>
+        </div>
+      </section>
+
+      <main>
+        <section id="tab-overview" class="tab-content active">
+          <div class="overview-grid">
+            <div class="visual">
+              <div class="visual-title">Daily incident volume and average handling time</div>
+              <div class="visual-subtitle">
+                Incident count by date, with average handling time shown as a line.
+              </div>
+              <div class="chart-frame short">
+                <canvas id="dailyChart"></canvas>
+              </div>
+            </div>
+
+            <div class="visual">
+              <div class="visual-title">Incident category breakdown</div>
+              <div class="visual-subtitle">
+                Share of total incidents by broad category.
+              </div>
+              <div class="chart-frame short">
+                <canvas id="categoryChart"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div class="lower-grid">
+            <div class="visual">
+              <div class="visual-title">Incident heat by hour</div>
+              <div class="visual-subtitle">
+                Peak hour: 6pm · Quietest hour: 5am.
+              </div>
+              <div class="chart-frame short">
+                <canvas id="hourlyChart"></canvas>
+              </div>
+            </div>
+
+            <div class="visual">
+              <div class="visual-title">Shift period summary</div>
+              <div class="visual-subtitle">
+                Incident volume grouped by operational shift band.
+              </div>
+
+              <table>
+                <thead>
+                  <tr>
+                    <th>Period</th>
+                    <th>Hours</th>
+                    <th style="text-align:right">Count</th>
+                    <th style="text-align:right">%</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  <tr>
+                    <td>Morning</td>
+                    <td>06:00–12:00</td>
+                    <td style="text-align:right">103</td>
+                    <td style="text-align:right">21.3%</td>
+                  </tr>
+                  <tr>
+                    <td colspan="4">
+                      <div class="bar-track">
+                        <div class="bar-fill" style="width:21.3%; background:#01a1f1"></div>
+                      </div>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td>Afternoon</td>
+                    <td>12:00–18:00</td>
+                    <td style="text-align:right">131</td>
+                    <td style="text-align:right">27.1%</td>
+                  </tr>
+                  <tr>
+                    <td colspan="4">
+                      <div class="bar-track">
+                        <div class="bar-fill" style="width:27.1%; background:#0078d4"></div>
+                      </div>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td>Evening</td>
+                    <td>18:00–00:00</td>
+                    <td style="text-align:right">164</td>
+                    <td style="text-align:right">33.9%</td>
+                  </tr>
+                  <tr>
+                    <td colspan="4">
+                      <div class="bar-track">
+                        <div class="bar-fill" style="width:33.9%; background:#f7630c"></div>
+                      </div>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td>Night</td>
+                    <td>00:00–06:00</td>
+                    <td style="text-align:right">84</td>
+                    <td style="text-align:right">17.4%</td>
+                  </tr>
+                  <tr>
+                    <td colspan="4">
+                      <div class="bar-track">
+                        <div class="bar-fill" style="width:17.4%; background:#605e5c"></div>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="insights">
+              <div class="visual-title">Key operational insights</div>
+              <div class="visual-subtitle">
+                Summary points for discussion.
+              </div>
+
+              <div class="insight-list">
+                <div class="insight-item alert">
+                  Evening shift accounts for the highest demand at 33.9% of incidents.
+                </div>
+                <div class="insight-item">
+                  10 Aug has the highest incident volume in the reporting period.
+                </div>
+                <div class="insight-item risk">
+                  Property Crime has the highest average handling time despite lower volume.
+                </div>
+                <div class="insight-item">
+                  Thief and Assault / Violence remains a core monitoring area due to its high incident volume.
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="tab-incidents" class="tab-content">
+          <div class="two-grid">
+            <div class="visual">
+              <div class="visual-title">Top 10 incident types</div>
+              <div class="visual-subtitle">
+                Most common incident types during the sample period.
+              </div>
+              <div class="chart-frame tall">
+                <canvas id="topTypesChart"></canvas>
+              </div>
+            </div>
+
+            <div class="visual">
+              <div class="visual-title">Average handling time by category</div>
+              <div class="visual-subtitle">
+                Average minutes required to resolve incidents by category.
+              </div>
+              <div class="chart-frame tall">
+                <canvas id="handlingByCategoryChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="tab-timing" class="tab-content">
+          <div class="two-grid">
+            <div class="visual">
+              <div class="visual-title">Daily handling time trend</div>
+              <div class="visual-subtitle">
+                Average incident handling time by date.
+              </div>
+              <div class="chart-frame tall">
+                <canvas id="handlingTrendChart"></canvas>
+              </div>
+            </div>
+
+            <div class="visual">
+              <div class="visual-title">Time-of-day distribution</div>
+              <div class="visual-subtitle">
+                Incident activity across 24 hours.
+              </div>
+              <div class="chart-frame tall">
+                <canvas id="timeOfDayChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+      </footer>
+    </div>
+  </div>
+
+  <script>
+    const dates = [
+      "01 Aug", "02 Aug", "03 Aug", "04 Aug",
+      "05 Aug", "06 Aug", "07 Aug", "08 Aug",
+      "09 Aug", "10 Aug", "11 Aug", "12 Aug",
+      "13 Aug", "14 Aug", "15 Aug", "16 Aug"
+    ];
+
+    const inc = [2, 35, 29, 25, 26, 34, 30, 43, 37, 57, 32, 30, 25, 29, 31, 19];
+
+    const avgHT = [104, 44, 49, 40.9, 58.4, 44.4, 35.8, 37.9, 50, 44.8, 39.7, 57.5, 78.9, 48.9, 43.2, 55];
+
+    const hLabels = Array.from({ length: 24 }, function(_, i) {
+      const h = i % 12 || 12;
+      return h + (i < 12 ? "am" : "pm");
+    });
+
+    const hData = [20, 20, 18, 14, 7, 5, 9, 9, 13, 22, 17, 33, 22, 24, 23, 19, 20, 23, 34, 24, 32, 31, 27, 16];
+
+    const catN = [
+      "Thief",
+      "Assault/Violence",
+      "Fighting/Dispute",
+      "Fire/Smoke",
+      "Mental Health",
+      "Suspicious Person",
+      "Property Crime"
+    ];
+
+    const catC = [178, 129, 49, 41, 36, 29, 22];
+    const catH = [39.7, 54.0, 56.3, 41.6, 53.6, 43.2, 62.4];
+
+    const pbiBlue = "#01a1f1";
+    const pbiDarkBlue = "#004578";
+    const pbiLightBlue = "#7fcef3";
+    const pbiOrange = "#f7630c";
+    const pbiGrey = "#a19f9d";
+    const pbiDarkGrey = "#605e5c";
+    const grid = "#eeeeee";
+
+    let loadedIncidents = false;
+    let loadedTiming = false;
+
+    function chartBaseOptions(extra) {
+      return Object.assign({
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            labels: {
+              boxWidth: 10,
+              font: {
+                size: 11
+              }
+            }
+          },
+          tooltip: {
+            backgroundColor: "#252423",
+            titleColor: "#ffffff",
+            bodyColor: "#ffffff",
+            cornerRadius: 2,
+            padding: 9
+          }
+        }
+      }, extra || {});
+    }
+
+    function showChartError() {
+      document.querySelectorAll(".chart-frame").forEach(function(frame) {
+        frame.innerHTML = '<div class="chart-error">Chart.js failed to load. Check internet connection or CDN access.</div>';
+      });
+    }
+
+    function switchTab(id, btn) {
+      document.querySelectorAll(".tab-content").forEach(function(tab) {
+        tab.classList.remove("active");
+      });
+
+      document.querySelectorAll(".page-tab").forEach(function(tab) {
+        tab.classList.remove("active");
+      });
+
+      document.getElementById("tab-" + id).classList.add("active");
+      btn.classList.add("active");
+
+      if (id === "incidents" && !loadedIncidents) {
+        requestAnimationFrame(function() {
+          initIncidentCharts();
+          loadedIncidents = true;
+        });
+      }
+
+      if (id === "timing" && !loadedTiming) {
+        requestAnimationFrame(function() {
+          initTimingCharts();
+          loadedTiming = true;
+        });
+      }
+    }
+
+    window.switchTab = switchTab;
+
+    if (typeof Chart === "undefined") {
+      showChartError();
+    } else {
+      Chart.defaults.font.family = "Segoe UI, Arial, sans-serif";
+      Chart.defaults.color = "#605e5c";
+
+      new Chart(document.getElementById("dailyChart"), {
+        type: "bar",
+        data: {
+          labels: dates,
+          datasets: [
+            {
+              label: "Incident Count",
+              data: inc,
+              backgroundColor: pbiBlue,
+              borderColor: pbiBlue,
+              borderWidth: 0,
+              yAxisID: "y",
+              order: 2,
+              barPercentage: 0.65
+            },
+            {
+              label: "Avg Handling Time",
+              data: avgHT,
+              type: "line",
+              borderColor: pbiOrange,
+              backgroundColor: pbiOrange,
+              pointRadius: 3,
+              pointHoverRadius: 4,
+              borderWidth: 2,
+              tension: 0.25,
+              fill: false,
+              yAxisID: "y1",
+              order: 1
+            }
+          ]
+        },
+        options: chartBaseOptions({
+          interaction: {
+            mode: "index",
+            intersect: false
+          },
+          scales: {
+            x: {
+              grid: {
+                display: false
+              },
+              ticks: {
+                font: {
+                  size: 10
+                }
+              }
+            },
+            y: {
+              beginAtZero: true,
+              grid: {
+                color: grid
+              },
+              title: {
+                display: true,
+                text: "Incidents"
+              }
+            },
+            y1: {
+              beginAtZero: true,
+              position: "right",
+              grid: {
+                drawOnChartArea: false
+              },
+              title: {
+                display: true,
+                text: "Minutes"
+              }
+            }
+          }
+        })
+      });
+
+      new Chart(document.getElementById("categoryChart"), {
+        type: "doughnut",
+        data: {
+          labels: catN,
+          datasets: [
+            {
+              data: catC,
+              backgroundColor: [
+                pbiDarkBlue,
+                pbiBlue,
+                pbiLightBlue,
+                "#b3d6ee",
+                pbiGrey,
+                "#d2d0ce",
+                pbiOrange
+              ],
+              borderColor: "#ffffff",
+              borderWidth: 1
+            }
+          ]
+        },
+        options: chartBaseOptions({
+          cutout: "60%",
+          plugins: {
+            legend: {
+              position: "bottom",
+              labels: {
+                boxWidth: 10,
+                font: {
+                  size: 10
+                }
+              }
+            },
+            tooltip: {
+              backgroundColor: "#252423",
+              callbacks: {
+                label: function(c) {
+                  return c.label + ": " + c.raw + " (" + (c.raw / 484 * 100).toFixed(1) + "%)";
+                }
+              }
+            }
+          }
+        })
+      });
+
+      const hourColors = hData.map(function(v) {
+        if (v >= 30) return pbiOrange;
+        if (v >= 20) return pbiBlue;
+        if (v >= 15) return pbiLightBlue;
+        return "#d2d0ce";
+      });
+
+      new Chart(document.getElementById("hourlyChart"), {
+        type: "bar",
+        data: {
+          labels: hLabels,
+          datasets: [
+            {
+              label: "Incidents",
+              data: hData,
+              backgroundColor: hourColors,
+              borderWidth: 0
+            }
+          ]
+        },
+        options: chartBaseOptions({
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                display: false
+              },
+              ticks: {
+                font: {
+                  size: 9
+                }
+              }
+            },
+            y: {
+              beginAtZero: true,
+              grid: {
+                color: grid
+              }
+            }
+          }
+        })
+      });
+    }
+
+    function initIncidentCharts() {
+      const topLabels = [
+        "Assault",
+        "Anti-Social",
+        "Killing",
+        "Attempted Suicide",
+        "Fighting",
+        "Suspicious Person",
+        "Fire",
+        "Assault & P.I.",
+        "Smoke Found",
+        "# Anti-Social"
+      ];
+
+      const topData = [85, 61, 38, 34, 32, 27, 23, 19, 12, 12];
+
+      new Chart(document.getElementById("topTypesChart"), {
+        type: "bar",
+        data: {
+          labels: topLabels,
+          datasets: [
+            {
+              label: "Incidents",
+              data: topData,
+              backgroundColor: pbiBlue,
+              borderWidth: 0
+            }
+          ]
+        },
+        options: chartBaseOptions({
+          indexAxis: "y",
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            x: {
+              beginAtZero: true,
+              grid: {
+                color: grid
+              }
+            },
+            y: {
+              grid: {
+                display: false
+              }
+            }
+          }
+        })
+      });
+
+      const sorted = catN.map(function(n, i) {
+        return {
+          n: n,
+          v: catH[i]
+        };
+      }).sort(function(a, b) {
+        return b.v - a.v;
+      });
+
+      new Chart(document.getElementById("handlingByCategoryChart"), {
+        type: "bar",
+        data: {
+          labels: sorted.map(function(x) {
+            return x.n;
+          }),
+          datasets: [
+            {
+              label: "Avg Handling Time",
+              data: sorted.map(function(x) {
+                return x.v;
+              }),
+              backgroundColor: pbiDarkBlue,
+              borderWidth: 0
+            }
+          ]
+        },
+        options: chartBaseOptions({
+          indexAxis: "y",
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            x: {
+              beginAtZero: true,
+              grid: {
+                color: grid
+              },
+              title: {
+                display: true,
+                text: "Minutes"
+              }
+            },
+            y: {
+              grid: {
+                display: false
+              }
+            }
+          }
+        })
+      });
+    }
+
+    function initTimingCharts() {
+      new Chart(document.getElementById("handlingTrendChart"), {
+        type: "line",
+        data: {
+          labels: dates,
+          datasets: [
+            {
+              label: "Avg Handling Time",
+              data: avgHT,
+              borderColor: pbiOrange,
+              backgroundColor: pbiOrange,
+              pointRadius: 3,
+              borderWidth: 2,
+              tension: 0.25,
+              fill: false
+            }
+          ]
+        },
+        options: chartBaseOptions({
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                display: false
+              },
+              ticks: {
+                font: {
+                  size: 10
+                }
+              }
+            },
+            y: {
+              beginAtZero: true,
+              grid: {
+                color: grid
+              },
+              title: {
+                display: true,
+                text: "Minutes"
+              }
+            }
+          }
+        })
+      });
+
+      new Chart(document.getElementById("timeOfDayChart"), {
+        type: "line",
+        data: {
+          labels: hLabels,
+          datasets: [
+            {
+              label: "Incidents",
+              data: hData,
+              borderColor: pbiBlue,
+              backgroundColor: "rgba(1, 161, 241, 0.12)",
+              pointRadius: 2,
+              borderWidth: 2,
+              tension: 0.3,
+              fill: true
+            }
+          ]
+        },
+        options: chartBaseOptions({
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                display: false
+              },
+              ticks: {
+                font: {
+                  size: 9
+                }
+              }
+            },
+            y: {
+              beginAtZero: true,
+              grid: {
+                color: grid
+              }
+            }
+          }
+        })
+      });
+    }
+  </script>
+</body>
+</html>
